@@ -1,0 +1,108 @@
+﻿@page "/"
+@using Gamesa.Shared;
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.SignalR.Client
+@inject IJSRuntime JS
+@inject HttpClient HttpClient
+
+<PageTitle>@PageTitle</PageTitle>
+
+<InputText @bind-Value="@GameId"></InputText>
+<button @onclick="@LoadGame">Load Game</button>
+<br />
+
+@if (GameEnabled)
+{
+    <canvas id="canvas" width="@Config.BoardSize" height="@Config.BoardSize" style="border: 1px solid black;"></canvas>
+}
+
+@code
+{
+    public string PageTitle { get; set; } = "Game";
+    public string? GameId { get; set; }
+    public bool GameEnabled { get; set; }
+
+    private DotNetObjectReference<Index> _objRef = null!;
+    private HubConnection _hubConnection = null!;
+    private GamePoint[]? _points;
+    private int? _steps;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _objRef = DotNetObjectReference.Create(this);
+
+        _hubConnection = new HubConnectionBuilder()
+            .WithUrl($"{Config.ServerAddress}/game-hub")
+            .WithAutomaticReconnect()
+            .Build();
+
+        _hubConnection.On<GamePoint[], int>("RefreshGame", async (points, steps) =>
+        {
+            _points = points;
+            _steps = steps;
+            await UpdateScreen();
+            StateHasChanged();
+        });
+
+        await _hubConnection.StartAsync();
+    }
+
+    async Task LoadGame()
+    {
+        if (string.IsNullOrEmpty(GameId))
+        {
+            GameId = Helpers.GenerateRandomGameId();
+        }
+        using (var response = await HttpClient.PostAsJsonAsync($"{Config.ServerAddress}/initialize", new InitializeGameData(GameId, Config.MaxPoints)))
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                return;
+            }
+        }
+        GameEnabled = true;
+        StateHasChanged();
+        await JS.InvokeVoidAsync("initGame", _objRef, Config.Delta4Point);
+        await _hubConnection.InvokeAsync("StartGame", GameId);
+    }
+
+    async Task UpdateScreen()
+    {
+        PageTitle = _steps.ToString()!;
+        await JS.InvokeVoidAsync("drawGame", new object?[] { _points });
+    }
+
+    int _pointIndex;
+    bool _moving;
+
+    [JSInvokable]
+    public async Task PointBeginMove(int x, int y)
+    {
+        for (var i = 0; i < _points!.Length; i++)
+        {
+            if (Math.Abs(_points[i].X - x) < Config.Delta4Point && Math.Abs(_points[i].Y - y) < Config.Delta4Point)
+            {
+                _pointIndex = i;
+                _moving = true;
+                await _hubConnection.InvokeAsync("StartMove", GameId, _pointIndex, x, y);
+                break;
+            }
+        }
+    }
+
+    [JSInvokable]
+    public void PointEndMove()
+    {
+        _moving = false;
+    }
+
+    [JSInvokable]
+    public async Task PointMoving(int x, int y)
+    {
+        if (_moving)
+        {
+            await _hubConnection.InvokeAsync("DoMove", GameId, _pointIndex, x, y);
+        }
+    }
+}

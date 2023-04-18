@@ -1,0 +1,8 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "GameStoreConnectionString": "DefaultEndpointsProtocol=https;AccountName=gamesastor;AccountKey=RqQyVTevZvycyl1UEOUrFUWSlAPa+5a0Zf1qaNOvYl9oF100etgOQBGoIjki61Cu8r9ZI0uPRpFK+ASt6K2sUQ==;EndpointSuffix=core.windows.net"
+  }
+}
